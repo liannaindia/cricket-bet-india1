@@ -228,6 +228,11 @@ app.delete('/admin/users/:phone', async (req, res) => {
     res.json({ success: true });
 });
 
+
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/admin.html'));
+});
+
 app.get('/admin/deposits', async (req, res) => {
     if (req.headers['user-id'] !== 'admin123') return res.status(403).json({ success: false, message: 'Unauthorized' });
     const deposits = JSON.parse(await fs.readFile(files.deposits));
