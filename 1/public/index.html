@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Bet India</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">Cricket Bet India</div>
+        <!-- 添加汉堡菜单按钮（手机端可见） -->
+        <button id="menu-toggle" class="menu-toggle">☰</button>
+        <nav class="nav-buttons">
+            <button id="loginBtn" class="btn">Login</button>
+            <button id="depositBtn" class="btn" style="display:none">Deposit</button>
+            <button id="withdrawBtn" class="btn" style="display:none">Withdraw</button>
+            <button id="profileBtn" class="btn" style="display:none">Profile</button>
+            <button id="logoutBtn" class="btn" style="display:none">Logout</button>
+        </nav>
+    </header>
+
+    <section id="userHeader" class="user-header" style="display:none">
+        <div class="user-info-top">
+            <h3>Welcome, <span id="userName"></span>!</h3>
+            <p>Balance: ₹<span id="balance">0</span></p>
+        </div>
+    </section>
+
+    <section class="promo-banner">
+        <h2>IPL 2025 - Bet Now & Win Big!</h2>
+        <p>Get 150% Welcome Bonus up to ₹20,000</p>
+    </section>
+
+    <div class="main-container">
+        <aside class="sidebar" id="sidebar">
+            <h3>Match Types</h3>
+            <ul id="matchTypesList"></ul>
+        </aside>
+
+        <main>
+            <section class="matches-container">
+                <div class="match-tabs">
+                    <button class="tab-btn active" onclick="displayMatchesByStatus('upcoming')">Upcoming Matches</button>
+                    <button class="tab-btn" onclick="displayMatchesByStatus('live')">Live Matches</button>
+                    <button class="tab-btn" onclick="displayMatchesByStatus('completed')">Completed Matches</button>
+                </div>
+                <div id="matches"></div>
+            </section>
+
+            <section id="auth" class="auth-modal" style="display:none">
+                <div class="modal-content">
+                    <h3 id="authTitle">Login</h3>
+                    <form id="authForm">
+                        <input type="text" id="phone" placeholder="Phone (10 digits)" maxlength="10" required>
+                        <input type="password" id="password" placeholder="Password (min 6 chars)" required>
+                        <button type="submit" class="btn">Login</button>
+                        <button type="button" id="toggleAuth" class="btn secondary">Register</button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="depositModal" class="auth-modal" style="display:none">
+                <div class="modal-content">
+                    <h3>Deposit</h3>
+                    <div id="depositInfo" class="info-box"></div>
+                    <form onsubmit="submitDeposit(event)">
+                        <input type="number" id="depositAmount" placeholder="₹50-₹20000" min="50" max="20000" required>
+                        <select id="depositMethod" onchange="toggleDepositFields()">
+                            <option value="upi">UPI</option>
+                            <option value="bank">Bank</option>
+                            <option value="crypto">Crypto (USDT)</option>
+                        </select>
+                        <input type="text" id="transactionId" placeholder="Transaction ID" required style="display:block">
+                        <input type="text" id="cryptoAddress" placeholder="USDT Address" style="display:none">
+                        <div class="modal-actions">
+                            <button type="submit" class="btn">Submit</button>
+                            <button type="button" class="btn secondary" onclick="closeModal('depositModal')">Close</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="withdrawModal" class="auth-modal" style="display:none">
+                <div class="modal-content">
+                    <h3>Withdraw</h3>
+                    <div id="withdrawInfo" class="info-box"></div>
+                    <form onsubmit="submitWithdraw(event)">
+                        <input type="number" id="withdrawAmount" placeholder="₹100-₹50000" min="100" max="50000" required>
+                        <select id="withdrawMethod" onchange="updateWithdrawInfo()">
+                            <option value="bank">Bank</option>
+                            <option value="usdt">USDT</option>
+                        </select>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn">Submit</button>
+                            <button type="button" class="btn secondary" onclick="closeModal('withdrawModal')">Close</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="profileModal" class="auth-modal" style="display:none">
+                <div class="modal-content">
+                    <h3>Profile</h3>
+                    <form onsubmit="updateProfile(event)">
+                        <input type="text" id="bankName" placeholder="Bank Account Name">
+                        <input type="text" id="bankAc" placeholder="Bank Account Number">
+                        <input type="text" id="bankIfsc" placeholder="IFSC Code">
+                        <input type="text" id="cryptoWallet" placeholder="USDT Wallet Address">
+                        <div class="modal-actions">
+                            <button type="submit" class="btn">Save</button>
+                            <button type="button" class="btn secondary" onclick="closeModal('profileModal')">Close</button>
+                        </div>
+                    </form>
+                    <div class="info-box">
+                        <p>Bank Name: <span id="currentBankName"></span></p>
+                        <p>Bank Account: <span id="currentBankAc"></span></p>
+                        <p>IFSC Code: <span id="currentBankIfsc"></span></p>
+                        <p>USDT Address: <span id="currentCrypto"></span></p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <p>Accepted Payments: UPI | Paytm | NetBanking</p>
+    </footer>
+
+    <!-- 返回顶部按钮 -->
+    <button id="back-to-top" class="back-to-top">↑</button>
+
+    <script>
+        let user = null;
+        let allMatches = [];
+        let selectedMatchType = null;
+        let selectedStatus = 'upcoming'; // 默认显示 Upcoming Matches
+
+        // 汉堡菜单逻辑
+        const menuToggle = document.getElementById('menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+
+        menuToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+        });
+
+        document.getElementById('loginBtn').onclick = () => {
+            document.getElementById('auth').style.display = 'flex';
+        };
+
+        document.getElementById('depositBtn').onclick = () => showForm('deposit');
+        document.getElementById('withdrawBtn').onclick = () => showForm('withdraw');
+        document.getElementById('profileBtn').onclick = () => showForm('profile');
+
+        document.getElementById('logoutBtn').onclick = () => {
+            user = null;
+            document.getElementById('userHeader').style.display = 'none';
+            document.getElementById('auth').style.display = 'none';
+            document.getElementById('loginBtn').style.display = 'block';
+            document.getElementById('depositBtn').style.display = 'none';
+            document.getElementById('withdrawBtn').style.display = 'none';
+            document.getElementById('profileBtn').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'none';
+            loadMatches();
+        };
+
+        document.getElementById('toggleAuth').onclick = () => {
+            const isLogin = document.getElementById('authTitle').textContent === 'Login';
+            document.getElementById('authTitle').textContent = isLogin ? 'Register' : 'Login';
+            document.getElementById('toggleAuth').textContent = isLogin ? 'Login' : 'Register';
+            document.getElementById('authForm').querySelector('button[type="submit"]').textContent = isLogin ? 'Register' : 'Login';
+        };
+
+        document.getElementById('authForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('phone').value;
+            const password = document.getElementById('password').value;
+            const isRegister = document.getElementById('authTitle').textContent === 'Register';
+
+            const res = await fetch(isRegister ? '/register' : '/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, password })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                user = data.user;
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('userHeader').style.display = 'flex';
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('depositBtn').style.display = 'inline-block';
+                document.getElementById('withdrawBtn').style.display = 'inline-block';
+                document.getElementById('profileBtn').style.display = 'inline-block';
+                document.getElementById('logoutBtn').style.display = 'inline-block';
+                document.getElementById('userName').textContent = user.name;
+                document.getElementById('balance').textContent = user.balance;
+                document.getElementById('currentBankName').textContent = user.bankInfo?.name || 'Not set';
+                document.getElementById('currentBankAc').textContent = user.bankInfo?.ac || 'Not set';
+                document.getElementById('currentBankIfsc').textContent = user.bankInfo?.ifsc || 'Not set';
+                document.getElementById('currentCrypto').textContent = user.cryptoWallet || 'Not set';
+                loadMatches();
+            } else {
+                alert(data.message);
+            }
+        };
+
+        async function loadMatches() {
+            try {
+                const res = await fetch('/matches');
+                const matches = await res.json();
+                if (!res.ok || !Array.isArray(matches)) {
+                    console.error('Failed to load matches:', matches.message || 'Unknown error');
+                    document.getElementById('matches').innerHTML = '<p>Error loading matches. Please try again later.</p>';
+                    return;
+                }
+
+                allMatches = matches;
+                updateSidebar();
+                displayMatches(selectedMatchType || Object.keys(getMatchTypes())[0]);
+            } catch (error) {
+                console.error('Error in loadMatches:', error);
+                document.getElementById('matches').innerHTML = '<p>Error loading matches. Please try again later.</p>';
+            }
+        }
+
+        function getMatchTypes() {
+            return allMatches.reduce((acc, match) => {
+                const type = (match.matchType || 'unknown').toUpperCase();
+                if (!acc[type]) acc[type] = [];
+                acc[type].push(match);
+                return acc;
+            }, {});
+        }
+
+        function updateSidebar() {
+            const matchTypes = getMatchTypes();
+            const matchTypesList = document.getElementById('matchTypesList');
+            matchTypesList.innerHTML = '';
+
+            Object.keys(matchTypes).forEach(type => {
+                const li = document.createElement('li');
+                li.innerHTML = `<button class="sidebar-btn" onclick="displayMatches('${type}')">${type} (${matchTypes[type].length})</button>`;
+                matchTypesList.appendChild(li);
+            });
+        }
+
+        function displayMatches(matchType) {
+            selectedMatchType = matchType;
+            displayMatchesByStatus(selectedStatus);
+        }
+
+        function displayMatchesByStatus(status) {
+            selectedStatus = status;
+
+            // 更新选项卡的激活状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(status)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const matchesDiv = document.getElementById('matches');
+            matchesDiv.innerHTML = '';
+
+            const matchTypes = getMatchTypes();
+            const matchesToDisplay = matchTypes[selectedMatchType] || [];
+
+            // 按状态过滤
+            const filteredMatches = matchesToDisplay.filter(m => m.status === status);
+
+            // 按时间升序排序（从早到晚）
+            filteredMatches.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // 显示比赛
+            const matchesList = document.createElement('div');
+            matchesList.className = 'matches-list';
+
+            filteredMatches.forEach(m => {
+                const matchDate = new Date(m.date);
+                const div = document.createElement('div');
+                div.className = 'match-card';
+                div.innerHTML = `
+                    <div class="match-header">
+                        <span class="status ${m.status}">${m.status.toUpperCase()}</span>
+                        <h3>${m.team1} vs ${m.team2}</h3>
+                    </div>
+                    <p>Time: ${matchDate.toLocaleString()}</p>
+                    <div class="odds">
+                        <span>${m.team1}: ${m.odds?.team1 || 'TBD'}</span>
+                        <span>${m.team2}: ${m.odds?.team2 || 'TBD'}</span>
+                    </div>
+                    ${user ? `
+                        <div class="bet-options">
+                            <input type="number" placeholder="₹20-₹5000" min="20" max="5000">
+                            <button class="btn" onclick="placeBet('${m.id}', '${m.team1}', this.previousElementSibling.value)">Bet on ${m.team1}</button>
+                            <button class="btn" onclick="placeBet('${m.id}', '${m.team2}', this.previousElementSibling.value)">Bet on ${m.team2}</button>
+                        </div>
+                    ` : '<p class="login-prompt">Login to place your bet</p>'}
+                `;
+                matchesList.appendChild(div);
+            });
+
+            matchesDiv.appendChild(matchesList);
+
+            if (filteredMatches.length === 0) {
+                matchesDiv.innerHTML = '<p>No matches available for this status.</p>';
+            }
+        }
+
+        async function placeBet(matchId, team, amount) {
+            if (!amount || amount < 20 || amount > 5000) {
+                alert('Invalid bet amount');
+                return;
+            }
+            const res = await fetch('/bet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, matchId, team, amount })
+            });
+            const data = await res.json();
+            if (data.success) {
+                user.balance = data.balance;
+                document.getElementById('balance').textContent = user.balance;
+                alert('Bet placed successfully!');
+            } else {
+                alert(data.message);
+            }
+        }
+
+        async function loadDepositInfo() {
+            const res = await fetch('/deposit-info');
+            const info = await res.json();
+            const div = document.getElementById('depositInfo');
+            div.innerHTML = `
+                <p><strong>UPI:</strong> ${info.upi || 'Not set'}</p>
+                <p><strong>Bank:</strong> ${info.bank?.name || 'Not set'} | ${info.bank?.ac || 'Not set'} | ${info.bank?.ifsc || 'Not set'}</p>
+                <p><strong>USDT Address:</strong> ${info.crypto || 'Not set'}</p>
+            `;
+        }
+
+        function updateWithdrawInfo() {
+            const method = document.getElementById('withdrawMethod').value;
+            const div = document.getElementById('withdrawInfo');
+            if (method === 'bank') {
+                div.innerHTML = `
+                    <p><strong>Bank Name:</strong> ${user.bankInfo?.name || 'Not set'}</p>
+                    <p><strong>Account Number:</strong> ${user.bankInfo?.ac || 'Not set'}</p>
+                    <p><strong>IFSC Code:</strong> ${user.bankInfo?.ifsc || 'Not set'}</p>
+                `;
+            } else {
+                div.innerHTML = `<p><strong>USDT Address:</strong> ${user.cryptoWallet || 'Not set'}</p>`;
+            }
+        }
+
+        function showForm(type) {
+            document.getElementById('depositModal').style.display = type === 'deposit' ? 'flex' : 'none';
+            document.getElementById('withdrawModal').style.display = type === 'withdraw' ? 'flex' : 'none';
+            document.getElementById('profileModal').style.display = type === 'profile' ? 'flex' : 'none';
+            if (type === 'deposit') loadDepositInfo();
+            if (type === 'withdraw') updateWithdrawInfo();
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function toggleDepositFields() {
+            const method = document.getElementById('depositMethod').value;
+            document.getElementById('transactionId').style.display = method === 'crypto' ? 'none' : 'block';
+            document.getElementById('cryptoAddress').style.display = method === 'crypto' ? 'block' : 'none';
+        }
+
+        async function submitDeposit(e) {
+            e.preventDefault();
+            const amount = document.getElementById('depositAmount').value;
+            const method = document.getElementById('depositMethod').value;
+            const transactionId = method === 'crypto' ? null : document.getElementById('transactionId').value;
+            const cryptoAddress = method === 'crypto' ? document.getElementById('cryptoAddress').value : null;
+            const res = await fetch('/deposit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, amount, method, transactionId, cryptoAddress })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Deposit submitted!');
+                closeModal('depositModal');
+            }
+        }
+
+        async function submitWithdraw(e) {
+            e.preventDefault();
+            const amount = document.getElementById('withdrawAmount').value;
+            const method = document.getElementById('withdrawMethod').value;
+            const res = await fetch('/withdraw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, amount, method })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Withdrawal submitted!');
+                closeModal('withdrawModal');
+            }
+        }
+
+        async function updateProfile(e) {
+            e.preventDefault();
+            const bankName = document.getElementById('bankName').value;
+            const bankAc = document.getElementById('bankAc').value;
+            const bankIfsc = document.getElementById('bankIfsc').value;
+            const cryptoWallet = document.getElementById('cryptoWallet').value;
+            const bankInfo = { name: bankName, ac: bankAc, ifsc: bankIfsc };
+            const res = await fetch('/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, bankInfo, cryptoWallet })
+            });
+            const data = await res.json();
+            if (data.success) {
+                user.bankInfo = bankInfo.name || bankInfo.ac || bankInfo.ifsc ? bankInfo : user.bankInfo;
+                user.cryptoWallet = cryptoWallet || user.cryptoWallet;
+                document.getElementById('currentBankName').textContent = user.bankInfo?.name || 'Not set';
+                document.getElementById('currentBankAc').textContent = user.bankInfo?.ac || 'Not set';
+                document.getElementById('currentBankIfsc').textContent = user.bankInfo?.ifsc || 'Not set';
+                document.getElementById('currentCrypto').textContent = user.cryptoWallet || 'Not set';
+                alert('Profile updated!');
+                closeModal('profileModal');
+            }
+        }
+
+        // 返回顶部按钮逻辑
+        const backToTopButton = document.getElementById('back-to-top');
+
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTopButton.classList.add('visible');
+            } else {
+                backToTopButton.classList.remove('visible');
+            }
+        });
+
+        backToTopButton.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        loadMatches();
+    </script>
+
+    <!-- 注释掉 Cloudflare 脚本（本地开发时避免 404 错误） -->
+    <!--
+    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'928ea4c21912675d',t:'MTc0MzQxMTQ5Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+    -->
+</body>
+</html>

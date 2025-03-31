@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Cricket Bet India</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">Admin - Cricket Bet India</div>
+        <nav>
+            <button class="btn" onclick="window.location.href='/index.html'">Back</button>
+        </nav>
+    </header>
+
+    <div class="admin-container">
+        <aside class="sidebar">
+            <ul>
+                <li><button class="sidebar-btn" onclick="showAdminSection('users')">Users</button></li>
+                <li><button class="sidebar-btn" onclick="showAdminSection('deposits')">Deposits</button></li>
+                <li><button class="sidebar-btn" onclick="showAdminSection('withdrawals')">Withdrawals</button></li>
+                <li><button class="sidebar-btn" onclick="showAdminSection('matches')">Matches</button></li>
+                <li><button class="sidebar-btn" onclick="showAdminSection('depositInfo')">Deposit Information</button></li>
+            </ul>
+        </aside>
+
+        <main class="admin-content">
+            <section id="usersSection" class="admin-section">
+                <h2>Users</h2>
+                <div id="users"></div>
+            </section>
+
+            <section id="depositsSection" class="admin-section" style="display:none">
+                <h2>Deposits</h2>
+                <div id="deposits"></div>
+            </section>
+
+            <section id="withdrawalsSection" class="admin-section" style="display:none">
+                <h2>Withdrawals</h2>
+                <div id="withdrawals"></div>
+            </section>
+
+            <section id="matchesSection" class="admin-section" style="display:none">
+                <h2>Matches</h2>
+                <div id="matchesAdmin"></div>
+            </section>
+
+            <section id="depositInfoSection" class="admin-section" style="display:none">
+                <h2>Deposit Information</h2>
+                <div id="depositInfoAdmin"></div>
+                <form onsubmit="updateDepositInfo(event)">
+                    <input type="text" id="upiInfo" placeholder="UPI Address">
+                    <input type="text" id="bankNameAdmin" placeholder="Bank Account Name">
+                    <input type="text" id="bankAcAdmin" placeholder="Bank Account Number">
+                    <input type="text" id="bankIfscAdmin" placeholder="IFSC Code">
+                    <input type="text" id="cryptoInfo" placeholder="USDT Address">
+                    <button type="submit" class="btn">Update</button>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const adminId = 'admin123';
+
+        function showAdminSection(section) {
+            document.querySelectorAll('.admin-section').forEach(s => s.style.display = 'none');
+            document.getElementById(`${section}Section`).style.display = 'block';
+        }
+
+        async function loadUsers() {
+            const res = await fetch('/admin/users', { headers: { 'user-id': adminId } });
+            const users = await res.json();
+            const div = document.getElementById('users');
+            div.innerHTML = users.map(u => `
+                <div class="admin-item">
+                    <p>${u.phone} - ₹${u.balance}</p>
+                    <button class="btn" onclick="deleteUser('${u.phone}')">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        async function deleteUser(phone) {
+            await fetch(`/admin/users/${phone}`, { method: 'DELETE', headers: { 'user-id': adminId } });
+            loadUsers();
+        }
+
+        async function loadDeposits() {
+            const res = await fetch('/admin/deposits', { headers: { 'user-id': adminId } });
+            const deposits = await res.json();
+            const div = document.getElementById('deposits');
+            div.innerHTML = deposits.map(d => `
+                <div class="admin-item">
+                    <p>ID: ${d.id} | User: ${d.userId} | ₹${d.amount} | ${d.method} | ${d.transactionId || d.cryptoAddress} | ${d.status}</p>
+                    ${d.status === 'pending' ? `
+                        <button class="btn" onclick="processDeposit('${d.id}', 'approve')">Approve</button>
+                        <button class="btn secondary" onclick="processDeposit('${d.id}', 'reject')">Reject</button>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function processDeposit(id, action) {
+            await fetch(`/admin/deposits/${id}`, {
+                method: 'POST',
+                headers: { 'user-id': adminId, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            loadDeposits();
+        }
+
+        async function loadWithdrawals() {
+            const res = await fetch('/admin/withdrawals', { headers: { 'user-id': adminId } });
+            const withdrawals = await res.json();
+            const div = document.getElementById('withdrawals');
+            div.innerHTML = withdrawals.map(w => `
+                <div class="admin-item">
+                    <p>ID: ${w.id} | User: ${w.userId} | ₹${w.amount} | ${w.method} | ${w.status}</p>
+                    ${w.status === 'pending' ? `
+                        <button class="btn" onclick="processWithdrawal('${w.id}', 'approve')">Approve</button>
+                        <button class="btn secondary" onclick="processWithdrawal('${w.id}', 'reject')">Reject</button>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function processWithdrawal(id, action) {
+            await fetch(`/admin/withdrawals/${id}`, {
+                method: 'POST',
+                headers: { 'user-id': adminId, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            loadWithdrawals();
+        }
+
+        async function loadMatchesAdmin() {
+            try {
+                const res = await fetch('/matches');
+                const matches = await res.json();
+                if (!res.ok || !Array.isArray(matches)) {
+                    console.error('Failed to load matches:', matches.message || 'Unknown error');
+                    document.getElementById('matchesAdmin').innerHTML = '<p>Error loading matches. Please try again later.</p>';
+                    return;
+                }
+
+                const div = document.getElementById('matchesAdmin');
+                div.innerHTML = matches.map(m => `
+                    <div class="admin-item match-card">
+                        <p>${m.team1} vs ${m.team2} | Time: ${new Date(m.date).toLocaleString()} | ${m.status}</p>
+                        <input id="odds1_${m.id}" type="number" step="0 rulemaking: .1" value="${m.odds?.team1 || 1.5}">
+                        <input id="odds2_${m.id}" type="number" step="0.1" value="${m.odds?.team2 || 1.5}">
+                        <button class="btn" onclick="setOdds('${m.id}')">Set Odds</button>
+                        <button class="btn" onclick="setResult('${m.id}', 'team1')">Team1 Wins</button>
+                        <button class="btn" onclick="setResult('${m.id}', 'team2')">Team2 Wins</button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error in loadMatchesAdmin:', error);
+                document.getElementById('matchesAdmin').innerHTML = '<p>Error loading matches. Please try again later.</p>';
+            }
+        }
+
+        async function setOdds(matchId) {
+            const odds1 = document.getElementById(`odds1_${matchId}`).value;
+            const odds2 = document.getElementById(`odds2_${matchId}`).value;
+            await fetch(`/admin/matches/${matchId}/odds`, {
+                method: 'POST',
+                headers: { 'user-id': adminId, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team1Odds: odds1, team2Odds: odds2 })
+            });
+            loadMatchesAdmin();
+        }
+
+        async function setResult(matchId, winner) {
+            await fetch(`/admin/matches/${matchId}/result`, {
+                method: 'POST',
+                headers: { 'user-id': adminId, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ winner })
+            });
+            loadMatchesAdmin();
+        }
+
+        async function loadDepositInfoAdmin() {
+            const res = await fetch('/deposit-info');
+            const info = await res.json();
+            const div = document.getElementById('depositInfoAdmin');
+            div.innerHTML = `
+                <p><strong>UPI:</strong> ${info.upi || 'Not set'}</p>
+                <p><strong>Bank Name:</strong> ${info.bank?.name || 'Not set'}</p>
+                <p><strong>Bank Account:</strong> ${info.bank?.ac || 'Not set'}</p>
+                <p><strong>IFSC Code:</strong> ${info.bank?.ifsc || 'Not set'}</p>
+                <p><strong>USDT Address:</strong> ${info.crypto || 'Not set'}</p>
+            `;
+        }
+
+        async function updateDepositInfo(e) {
+            e.preventDefault();
+            const upi = document.getElementById('upiInfo').value;
+            const bankName = document.getElementById('bankNameAdmin').value;
+            const bankAc = document.getElementById('bankAcAdmin').value;
+            const bankIfsc = document.getElementById('bankIfscAdmin').value;
+            const crypto = document.getElementById('cryptoInfo').value;
+            const bank = { name: bankName, ac: bankAc, ifsc: bankIfsc };
+            await fetch('/admin/deposit-info', {
+                method: 'POST',
+                headers: { 'user-id': adminId, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ upi, bank, crypto })
+            });
+            loadDepositInfoAdmin();
+        }
+
+        loadUsers();
+        loadDeposits();
+        loadWithdrawals();
+        loadMatchesAdmin();
+        loadDepositInfoAdmin();
+        showAdminSection('users');
+    </script>
+</body>
+</html>
