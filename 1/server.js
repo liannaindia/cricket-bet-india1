@@ -73,7 +73,6 @@ async function initCollections() {
                 await collection.insertOne({ odds: initialData[key] });
                 console.log(`Initialized ${collectionName} with default data`);
             } else {
-                // 只有当数组不为空时才调用 insertMany
                 if (initialData[key].length > 0) {
                     await collection.insertMany(initialData[key]);
                     console.log(`Initialized ${collectionName} with ${initialData[key].length} documents`);
@@ -96,7 +95,11 @@ const checkMongoConnection = (req, res, next) => {
 };
 
 // CricketData.org API 配置
-const CRICKETDATA_API_KEY = process.env.CRICKETDATA_API_KEY || 'your-default-api-key';
+const CRICKETDATA_API_KEY = process.env.CRICKETDATA_API_KEY;
+if (!CRICKETDATA_API_KEY) {
+    console.error('CRICKETDATA_API_KEY is not set in environment variables. Please set it to a valid CricAPI key.');
+    process.exit(1); // 退出程序，防止使用无效的 API 密钥
+}
 
 // 获取比赛数据
 app.get('/matches', async (req, res) => {
@@ -111,11 +114,13 @@ app.get('/matches', async (req, res) => {
                 const seriesId = series.id;
                 const seriesMatchesResponse = await fetch(`https://api.cricapi.com/v1/series_info?apikey=${CRICKETDATA_API_KEY}&id=${seriesId}`);
                 const seriesMatchesData = await seriesMatchesResponse.json();
+                console.log(`Series matches data for series ${seriesId}:`, seriesMatchesData);
                 if (seriesMatchesData && seriesMatchesData.data && seriesMatchesData.data.matchList) {
                     allMatches = allMatches.concat(seriesMatchesData.data.matchList);
                 }
             }
         }
+        console.log('Matches after series fetch:', allMatches.length);
         if (allMatches.length < 50) {
             const matchesPerPage = 25;
             const pagesToFetch = 5;
@@ -128,10 +133,12 @@ app.get('/matches', async (req, res) => {
                     continue;
                 }
                 const apiData = await response.json();
+                console.log(`Matches data at offset ${offset}:`, apiData);
                 if (!apiData || !apiData.data) continue;
                 allMatches = allMatches.concat(apiData.data);
             }
         }
+        console.log('Total matches fetched:', allMatches.length);
         if (allMatches.length === 0) {
             return res.status(200).json({ success: true, message: 'No matches available from API', data: [] });
         }
@@ -251,10 +258,10 @@ app.get('/admin', (req, res) => {
 });
 
 app.get('/admin-login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/admin-login.html'));
+    res.sendFile(path.join(__dirname, 'public 1/admin-login.html'));
 });
 
-app.post('/admin-login', (req, res) => {
+app.post('/admin-login', (req, res)  => {
     const { username, password } = req.body;
     const ADMIN_USERNAME = 'admin';
     const ADMIN_PASSWORD = 'your-secure-password';
@@ -383,7 +390,6 @@ connectToMongo().then(() => {
         app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
     }).catch(err => {
         console.error('Error initializing collections:', err);
-        // 即使 MongoDB 连接失败，也启动服务
         const port = process.env.PORT || 3000;
         app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port} (MongoDB not connected)`));
     });
