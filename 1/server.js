@@ -4,6 +4,7 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const morgan = require('morgan');
 const { MongoClient } = require('mongodb');
+const path = require('path');
 
 const app = express();
 
@@ -19,20 +20,14 @@ app.use(session({
 
 // MongoDB 配置
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/cricket-bet-india';
-const client = new MongoClient(MONGO_URI);
+const client = new MongoClient(MONGO_URI, {
+    tls: true,
+    tlsAllowInvalidCertificates: false,
+    serverSelectionTimeoutMS: 5000
+});
 let db;
+let isMongoConnected = false;
 
-async function connectToMongo() {
-    try {
-        await client.connect();
-        db = client.db('cricket-bet-india');
-        console.log('Connected to MongoDB');
-    } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
-    }
-}
-
-// 替换文件存储为 MongoDB 集合
 const collections = {
     users: 'users',
     bets: 'bets',
@@ -42,7 +37,23 @@ const collections = {
     matchOdds: 'matchOdds'
 };
 
+async function connectToMongo() {
+    try {
+        await client.connect();
+        db = client.db('cricket-bet-india');
+        isMongoConnected = true;
+        console.log('Connected to MongoDB');
+    } catch (error) {
+        console.error('Error connecting to MongoDB:', error);
+        isMongoConnected = false;
+    }
+}
+
 async function initCollections() {
+    if (!isMongoConnected || !db) {
+        console.error('MongoDB is not connected, skipping collection initialization');
+        return;
+    }
     const initialData = {
         users: [],
         bets: [],
@@ -57,24 +68,44 @@ async function initCollections() {
         if (count === 0) {
             if (key === 'depositInfo') {
                 await collection.insertOne(initialData[key]);
+                console.log(`Initialized ${collectionName} with default data`);
             } else if (key === 'matchOdds') {
                 await collection.insertOne({ odds: initialData[key] });
+                console.log(`Initialized ${collectionName} with default data`);
             } else {
-                await collection.insertMany(initialData[key]);
+                // 只有当数组不为空时才调用 insertMany
+                if (initialData[key].length > 0) {
+                    await collection.insertMany(initialData[key]);
+                    console.log(`Initialized ${collectionName} with ${initialData[key].length} documents`);
+                } else {
+                    console.log(`Skipped initializing ${collectionName} as initial data is empty`);
+                }
             }
+        } else {
+            console.log(`${collectionName} already has ${count} documents, skipping initialization`);
         }
     }
 }
 
+// 检查 MongoDB 连接状态的中间件
+const checkMongoConnection = (req, res, next) => {
+    if (!isMongoConnected) {
+        return res.status(503).json({ success: false, message: 'Service unavailable: MongoDB is not connected' });
+    }
+    next();
+};
+
 // CricketData.org API 配置
-const CRICKETDATA_API_KEY = '96b0dd75-0754-4c12-816a-efe4d2267e64';
+const CRICKETDATA_API_KEY = process.env.CRICKETDATA_API_KEY || 'your-default-api-key';
 
 // 获取比赛数据
 app.get('/matches', async (req, res) => {
+    console.log('Matches route called at:', new Date().toISOString());
     try {
         let allMatches = [];
         const seriesResponse = await fetch(`https://api.cricapi.com/v1/series?apikey=${CRICKETDATA_API_KEY}`);
         const seriesData = await seriesResponse.json();
+        console.log('Series data:', seriesData);
         if (seriesData && seriesData.data) {
             for (const series of seriesData.data) {
                 const seriesId = series.id;
@@ -102,9 +133,9 @@ app.get('/matches', async (req, res) => {
             }
         }
         if (allMatches.length === 0) {
-            return res.status(500).json({ success: false, message: 'No matches available from API' });
+            return res.status(200).json({ success: true, message: 'No matches available from API', data: [] });
         }
-        const matchOddsDoc = await db.collection(collections.matchOdds).findOne();
+        const matchOddsDoc = isMongoConnected ? await db.collection(collections.matchOdds).findOne() : { odds: {} };
         const matchOdds = matchOddsDoc ? matchOddsDoc.odds : {};
         const matches = allMatches.map(match => {
             const now = new Date();
@@ -126,15 +157,15 @@ app.get('/matches', async (req, res) => {
             };
         });
         matches.sort((a, b) => new Date(a.date) - new Date(b.date));
-        res.json(matches);
+        res.json({ success: true, data: matches });
     } catch (error) {
         console.error('Error fetching matches:', error);
-        res.status(500).json({ success: false, message: 'Error fetching matches' });
+        res.status(500).json({ success: false, message: 'Error fetching matches', error: error.message });
     }
 });
 
-// 用户路由
-app.post('/register', async (req, res) => {
+// 其他路由（需要 MongoDB 的路由使用 checkMongoConnection 中间件）
+app.post('/register', checkMongoConnection, async (req, res) => {
     const { phone, password } = req.body;
     if (!phone || phone.length !== 10 || !password || password.length < 6) return res.json({ success: false, message: 'Invalid input' });
     const usersCollection = db.collection(collections.users);
@@ -154,7 +185,7 @@ app.post('/register', async (req, res) => {
     res.json({ success: true, user });
 });
 
-app.post('/login', async (req, res) => {
+app.post('/login', checkMongoConnection, async (req, res) => {
     const { phone, password } = req.body;
     const usersCollection = db.collection(collections.users);
     const user = await usersCollection.findOne({ phone });
@@ -163,7 +194,7 @@ app.post('/login', async (req, res) => {
     res.json({ success: true, user });
 });
 
-app.post('/profile', async (req, res) => {
+app.post('/profile', checkMongoConnection, async (req, res) => {
     const { userId, bankInfo, cryptoWallet } = req.body;
     const usersCollection = db.collection(collections.users);
     const user = await usersCollection.findOne({ id: userId });
@@ -174,8 +205,7 @@ app.post('/profile', async (req, res) => {
     res.json({ success: true, user });
 });
 
-// 投注路由
-app.post('/bet', async (req, res) => {
+app.post('/bet', checkMongoConnection, async (req, res) => {
     const { userId, matchId, team, amount } = req.body;
     const usersCollection = db.collection(collections.users);
     const user = await usersCollection.findOne({ id: userId });
@@ -186,14 +216,13 @@ app.post('/bet', async (req, res) => {
     res.json({ success: true, balance: user.balance - amount });
 });
 
-// 财务路由
-app.get('/deposit-info', async (req, res) => {
+app.get('/deposit-info', checkMongoConnection, async (req, res) => {
     const depositInfoCollection = db.collection(collections.depositInfo);
     const info = await depositInfoCollection.findOne();
     res.json(info);
 });
 
-app.post('/deposit', async (req, res) => {
+app.post('/deposit', checkMongoConnection, async (req, res) => {
     const { userId, amount, method, transactionId, cryptoAddress } = req.body;
     if (amount < 50 || amount > 20000) return res.json({ success: false, message: 'Invalid amount' });
     const depositsCollection = db.collection(collections.deposits);
@@ -201,7 +230,7 @@ app.post('/deposit', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/withdraw', async (req, res) => {
+app.post('/withdraw', checkMongoConnection, async (req, res) => {
     if (!req.session.userId || req.session.userId !== req.body.userId) {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
@@ -214,7 +243,6 @@ app.post('/withdraw', async (req, res) => {
     res.json({ success: true });
 });
 
-// 管理端路由
 app.get('/admin', (req, res) => {
     if (!req.session.isAdmin) {
         return res.redirect('/admin-login');
@@ -242,28 +270,28 @@ app.post('/admin-logout', (req, res) => {
     res.json({ success: true, redirect: '/admin-login' });
 });
 
-app.get('/admin/users', async (req, res) => {
+app.get('/admin/users', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const usersCollection = db.collection(collections.users);
     const users = await usersCollection.find().toArray();
     res.json(users);
 });
 
-app.delete('/admin/users/:phone', async (req, res) => {
+app.delete('/admin/users/:phone', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const usersCollection = db.collection(collections.users);
     await usersCollection.deleteOne({ phone: req.params.phone });
     res.json({ success: true });
 });
 
-app.get('/admin/deposits', async (req, res) => {
+app.get('/admin/deposits', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const depositsCollection = db.collection(collections.deposits);
     const deposits = await depositsCollection.find().toArray();
     res.json(deposits);
 });
 
-app.post('/admin/deposits/:id', async (req, res) => {
+app.post('/admin/deposits/:id', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const { action } = req.body;
     const depositsCollection = db.collection(collections.deposits);
@@ -276,14 +304,14 @@ app.post('/admin/deposits/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-app.get('/admin/withdrawals', async (req, res) => {
+app.get('/admin/withdrawals', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const withdrawalsCollection = db.collection(collections.withdrawals);
     const withdrawals = await withdrawalsCollection.find().toArray();
     res.json(withdrawals);
 });
 
-app.post('/admin/withdrawals/:id', async (req, res) => {
+app.post('/admin/withdrawals/:id', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const { action } = req.body;
     const withdrawalsCollection = db.collection(collections.withdrawals);
@@ -296,7 +324,7 @@ app.post('/admin/withdrawals/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/admin/matches/:id/odds', async (req, res) => {
+app.post('/admin/matches/:id/odds', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const { team1Odds, team2Odds } = req.body;
     const matchOddsCollection = db.collection(collections.matchOdds);
@@ -304,7 +332,7 @@ app.post('/admin/matches/:id/odds', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/admin/matches/:id/result', async (req, res) => {
+app.post('/admin/matches/:id/result', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const { winner } = req.body;
     const betsCollection = db.collection(collections.bets);
@@ -336,7 +364,7 @@ app.post('/admin/matches/:id/result', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/admin/deposit-info', async (req, res) => {
+app.post('/admin/deposit-info', checkMongoConnection, async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ success: false, message: 'Unauthorized' });
     const { upi, bank, crypto } = req.body;
     const depositInfoCollection = db.collection(collections.depositInfo);
@@ -353,5 +381,10 @@ connectToMongo().then(() => {
     initCollections().then(() => {
         const port = process.env.PORT || 3000;
         app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
+    }).catch(err => {
+        console.error('Error initializing collections:', err);
+        // 即使 MongoDB 连接失败，也启动服务
+        const port = process.env.PORT || 3000;
+        app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port} (MongoDB not connected)`));
     });
 });
