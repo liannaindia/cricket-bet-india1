@@ -252,29 +252,29 @@ app.post('/withdraw', checkMongoConnection, async (req, res) => {
 
 app.get('/admin', (req, res) => {
     if (!req.session.isAdmin) {
-        return res.redirect('/admin');
+        return res.redirect('/admin-login');
     }
     res.sendFile(path.join(__dirname, 'public/admin.html'));
 });
 
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public 1/admin.html'));
+app.get('/admin-login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/admin-login.html'));
 });
 
-app.post('/admin', (req, res)  => {
+app.post('/admin-login', (req, res) => {
     const { username, password } = req.body;
-    const ADMIN_USERNAME = 'admin';
-    const ADMIN_PASSWORD = 'your-secure-password';
+    const ADMIN_USERNAME = 'admin'; // 替换为你的管理员用户名
+    const ADMIN_PASSWORD = '123456'; // 替换为你的管理员密码
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
         req.session.isAdmin = true;
         return res.json({ success: true, redirect: '/admin' });
     }
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
+    res.status(401).json({ success: false, message: '用户名或密码错误' });
 });
 
 app.post('/admin-logout', (req, res) => {
     req.session.destroy();
-    res.json({ success: true, redirect: '/admin' });
+    res.json({ success: true, redirect: '/admin-login' });
 });
 
 app.get('/admin/users', checkMongoConnection, async (req, res) => {
