@@ -252,16 +252,16 @@ app.post('/withdraw', checkMongoConnection, async (req, res) => {
 
 app.get('/admin', (req, res) => {
     if (!req.session.isAdmin) {
-        return res.redirect('/admin-login');
+        return res.redirect('/admin');
     }
     res.sendFile(path.join(__dirname, 'public/admin.html'));
 });
 
-app.get('/admin-login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public 1/admin-login.html'));
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public 1/admin.html'));
 });
 
-app.post('/admin-login', (req, res)  => {
+app.post('/admin', (req, res)  => {
     const { username, password } = req.body;
     const ADMIN_USERNAME = 'admin';
     const ADMIN_PASSWORD = 'your-secure-password';
@@ -274,7 +274,7 @@ app.post('/admin-login', (req, res)  => {
 
 app.post('/admin-logout', (req, res) => {
     req.session.destroy();
-    res.json({ success: true, redirect: '/admin-login' });
+    res.json({ success: true, redirect: '/admin' });
 });
 
 app.get('/admin/users', checkMongoConnection, async (req, res) => {
