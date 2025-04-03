@@ -9,7 +9,6 @@
 <body>
     <header>
         <div class="logo">Cricket Bet India</div>
-        <!-- 添加汉堡菜单按钮（手机端可见） -->
         <button id="menu-toggle" class="menu-toggle">☰</button>
         <nav class="nav-buttons">
             <button id="loginBtn" class="btn">Login</button>
@@ -127,16 +126,14 @@
         <p>Accepted Payments: UPI | Paytm | NetBanking</p>
     </footer>
 
-    <!-- 返回顶部按钮 -->
     <button id="back-to-top" class="back-to-top">↑</button>
 
     <script>
         let user = null;
         let allMatches = [];
         let selectedMatchType = null;
-        let selectedStatus = 'upcoming'; // 默认显示 Upcoming Matches
+        let selectedStatus = 'upcoming';
 
-        // 汉堡菜单逻辑
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
 
@@ -208,14 +205,20 @@
         async function loadMatches() {
             try {
                 const res = await fetch('/matches');
-                const matches = await res.json();
-                if (!res.ok || !Array.isArray(matches)) {
-                    console.error('Failed to load matches:', matches.message || 'Unknown error');
+                const result = await res.json();
+                if (!res.ok || !result.success) {
+                    console.error('Failed to load matches:', result.message || 'Unknown error');
                     document.getElementById('matches').innerHTML = '<p>Error loading matches. Please try again later.</p>';
                     return;
                 }
 
-                allMatches = matches;
+                allMatches = result.data;
+                if (!Array.isArray(allMatches)) {
+                    console.error('Matches data is not an array:', allMatches);
+                    document.getElementById('matches').innerHTML = '<p>Error loading matches. Please try again later.</p>';
+                    return;
+                }
+
                 updateSidebar();
                 displayMatches(selectedMatchType || Object.keys(getMatchTypes())[0]);
             } catch (error) {
@@ -253,7 +256,6 @@
         function displayMatchesByStatus(status) {
             selectedStatus = status;
 
-            // 更新选项卡的激活状态
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.textContent.toLowerCase().includes(status)) {
@@ -267,13 +269,10 @@
             const matchTypes = getMatchTypes();
             const matchesToDisplay = matchTypes[selectedMatchType] || [];
 
-            // 按状态过滤
             const filteredMatches = matchesToDisplay.filter(m => m.status === status);
 
-            // 按时间升序排序（从早到晚）
             filteredMatches.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-            // 显示比赛
             const matchesList = document.createElement('div');
             matchesList.className = 'matches-list';
 
@@ -305,7 +304,7 @@
             matchesDiv.appendChild(matchesList);
 
             if (filteredMatches.length === 0) {
-                matchesDiv.innerHTML = '<p>No matches available for this status.</p>';
+                matchesDiv.innerHTML = `<p>No ${status} matches available for ${selectedMatchType} type. Try a different status or match type.</p>`;
             }
         }
 
@@ -431,7 +430,6 @@
             }
         }
 
-        // 返回顶部按钮逻辑
         const backToTopButton = document.getElementById('back-to-top');
 
         window.addEventListener('scroll', () => {
@@ -451,10 +449,5 @@
 
         loadMatches();
     </script>
-
-    <!-- 注释掉 Cloudflare 脚本（本地开发时避免 404 错误） -->
-    <!--
-    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'928ea4c21912675d',t:'MTc0MzQxMTQ5Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
-    -->
 </body>
 </html>
