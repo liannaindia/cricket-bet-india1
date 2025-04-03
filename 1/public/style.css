@@ -552,22 +552,6 @@ footer {
     transform: scale(1.1);
 }
 
-/* 点击领取免费奖金按钮样式 */
-.claim-bonus-btn {
-    display: inline-block;
-    margin-top: 10px;
-    padding: 10px 20px;
-    background-color: #ff6200;
-    color: white;
-    text-decoration: none;
-    border-radius: 5px;
-    font-weight: bold;
-    transition: background-color 0.3s;
-}
-
-.claim-bonus-btn:hover {
-    background-color: #e55a00;
-}
 
     /* 调整返回顶部按钮 */
     .back-to-top {
